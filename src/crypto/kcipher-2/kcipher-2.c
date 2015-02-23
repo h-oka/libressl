@@ -13,13 +13,15 @@ uint32_t A[5];              // five 32-bit units
 uint32_t B[11];             // eleven 32-bit units
 uint32_t L1, R1, L2, R2;    // one 32-bit unit for each
 uint32_t pL1, pL2, pR1, pR2; //32-bit unit pre two stream
-uint32_t *NA = NULL, *NB = NULL, *AA = NULL, *BB = NULL;
-uint32_t A0, A4, B0, B10;
-uint32_t nA4, nB10;
+uint32_t A0, B0;
+uint32_t nA[5], nB[5];
 
 // The internal key (IK) and the initialization vector (IV)
 uint32_t IK[12];    // (12*32) bits
 uint32_t IV[4];     // (4*32) bits
+
+
+
 
 
 /**
@@ -28,7 +30,7 @@ uint32_t IV[4];     // (4*32) bits
  * @return       : (OUTPUT), (1*32) bits
  */
 
-uint32_t sub_k2 (uint32_t in) {
+inline static uint32_t sub_k2 (uint32_t in) {
     uint32_t out;
     
     
@@ -48,7 +50,7 @@ uint32_t sub_k2 (uint32_t in) {
  * @modify   IV[12]  : (OUTPUT), (4*32) bits
  */
 
-void key_expansion (uint32_t *key, uint32_t *iv) {
+inline static void key_expansion (uint32_t *key, uint32_t *iv) {
     // copy iv to IV
     IV[0] = iv[0];  IV[1] = iv[1];  IV[2] = iv[2];  IV[3] = iv[3];
     
@@ -79,7 +81,7 @@ void key_expansion (uint32_t *key, uint32_t *iv) {
  * @modify   S       : (OUTPUT), (A, B, L1, R1, L2, R2)
  */
 
-void setup_state_values (uint32_t *key, uint32_t *iv) {
+inline static void setup_state_values (uint32_t *key, uint32_t *iv) {
     // setting up IK and IV by calling key_expansion(key, iv)
     key_expansion(key, iv);
     
@@ -106,22 +108,16 @@ void setup_state_values (uint32_t *key, uint32_t *iv) {
  * @modify   S       : (OUTPUT), (A, B, L1, R1, L2, R2)
  */
 
-void init (uint32_t *k, uint32_t *iv) {
+inline static void init (uint32_t *k, uint32_t *iv) {
     int i;
 
     setup_state_values(k, iv);
 
     
-
-    //for(i=0; i < 24; i++) {
         nextinit(); nextinit(); nextinit(); nextinit(); 
         nextinit(); nextinit(); nextinit(); nextinit(); 
         nextinit(); nextinit(); nextinit(); nextinit();
-        //nextinit(); nextinit(); nextinit(); nextinit(); 
-        //nextinit(); nextinit(); nextinit(); nextinit(); 
-        //nextinit(); nextinit(); nextinit(); nextinit(); 
-
-    //}
+    
 }
 
 /**
@@ -138,12 +134,9 @@ void init (uint32_t *k, uint32_t *iv) {
  * @param    mode    : (INPUT) INIT (= 0) or NORMAL (= 1)
  * @modify   S       : (OUTPUT)
  */
-void nextinit () {
-    //uint32_t nA[2][5];
-    //uint32_t nB[2][11];
-    //uint32_t nL1[2], nR1[2], nL2[2], nR2[2];
+inline static void nextinit () {
     uint32_t temp1[2], temp2[2];
-    uint32_t zh1, zh2, zl1, zl2; 
+    
     
     pL1 = sub_k2(R2 + B[4]);
     pR1 = sub_k2(L2 + B[9]);
@@ -159,15 +152,15 @@ void nextinit () {
     // update nA[4]
     temp1[0] = (A[0] << 8) ^ amul0[(A[0] >> 24)];
 
-    A4 = temp1[0] ^ A[3];
+    nA[0] = temp1[0] ^ A[3];
     
-    A4 ^= NLF(B[0], R2, R1, A[4]);
+    nA[0] ^= NLF(B[0], R2, R1, A[4]);
 
     temp1[1] = (A[1] << 8) ^ amul0[(A[1] >> 24)];
 
-    nA4 = temp1[1] ^ A[4];
+    nA[1] = temp1[1] ^ A[4];
     
-    nA4 ^= NLF(B0, pR2, pR1, A4);
+    nA[1] ^= NLF(B0, pR2, pR1, nA[0]);
     
 
     temp1[0] = A[2] & 0x40000000 ? (B[0] << 8) ^ amul1[(B[0] >> 24)] 
@@ -176,10 +169,10 @@ void nextinit () {
     temp2[0] = A[2] & 0x80000000 ? (B[8] << 8) ^ amul3[(B[8] >> 24)]
                                       : B[8];
     
-    B10 = temp1[0] ^ B[1] ^ B[6] ^ temp2[0];
+    nB[0] = temp1[0] ^ B[1] ^ B[6] ^ temp2[0];
     
     
-    B10 ^= NLF(B[10], L2, L1, A[0]);
+    nB[0] ^= NLF(B[10], L2, L1, A[0]);
     //printf("b[10] = %x\n", B10);
 
     temp1[1] = A[3] & 0x40000000 ? (B[1] << 8) ^ amul1[(B[1] >> 24)] 
@@ -188,10 +181,10 @@ void nextinit () {
     temp2[1] = A[3] & 0x80000000 ? (B[9] << 8) ^ amul3[(B[9] >> 24)]
                                       : B[9];
     
-    nB10 = temp1[1] ^ B[2] ^ B[7] ^ temp2[1];
+    nB[1] = temp1[1] ^ B[2] ^ B[7] ^ temp2[1];
     
     
-    nB10 ^= NLF(B10, pL2, pL1, A0);
+    nB[1] ^= NLF(nB[0], pL2, pL1, A0);
     //printf("b[10] = %x\n", nB10);
 
 
@@ -204,28 +197,30 @@ void nextinit () {
 
     /* copy S' to S */
     A[0] = A[2];   A[1] = A[3];   A[2] = A[4];
-    A[3] = A4;   A[4] = nA4;
+    A[3] = nA[0];   A[4] = nA[1];
     
     B[0] = B[2];   B[1] = B[3];   B[2] = B[4];   B[3] = B[5];
     B[4] = B[6];   B[5] = B[7];   B[6] = B[8];   B[7] = B[9];
-    B[8] = B[10];   B[9] = B10;   B[10] = nB10;
+    B[8] = B[10];   B[9] = nB[0];   B[10] = nB[1];
     
-    
+    //L1 = nL1;   R1 = nR1;   L2 = nL2;   R2 = nR2;
     
     
     
 }
 
-void nextnormal (uint32_t *encode) {
+inline static void nextnormal (uint32_t *encode) {
     
     uint32_t temp1[2], temp2[2];
-    int j, i;
+    //int j, i;
 
+    
     uint32_t nlf1[8] __attribute__((aligned(32)));
     uint32_t nlf2[8] __attribute__((aligned(32)));
     uint32_t nlf3[8] __attribute__((aligned(32)));
     uint32_t nlf4[8] __attribute__((aligned(32)));
-
+    //uint32_t keystream[8] __attribute__((aligned(32)));
+    
     
     pL1 = sub_k2(R2 + B[4]);
     pR1 = sub_k2(L2 + B[9]);
@@ -233,10 +228,12 @@ void nextnormal (uint32_t *encode) {
     pR2 = sub_k2(R1);
     
     
+    
     L1 = sub_k2(pR2 + B[5]);
     R1 = sub_k2(pL2 + B[10]);
     L2 = sub_k2(pL1);
     R2 = sub_k2(pR1);
+    
 
     // first m = 0 ... 3
     A0 = A[1];
@@ -250,8 +247,8 @@ void nextnormal (uint32_t *encode) {
     temp1[0] = (A[0] << 8) ^ amul0[(A[0] >> 24)];
     temp1[1] = (A[1] << 8) ^ amul0[(A[1] >> 24)];
 
-    A4 = temp1[0] ^ A[3];
-    nA4 = temp1[1] ^ A[4];
+    nA[0] = temp1[0] ^ A[3];
+    nA[1] = temp1[1] ^ A[4];
 
 
 
@@ -262,7 +259,7 @@ void nextnormal (uint32_t *encode) {
     temp2[0] = A[2] & 0x80000000 ? (B[8] << 8) ^ amul3[(B[8] >> 24)]
                                       : B[8];
     
-    B10 = temp1[0] ^ B[1] ^ B[6] ^ temp2[0];
+    nB[0] = temp1[0] ^ B[1] ^ B[6] ^ temp2[0];
 
 
     temp1[1] = A[3] & 0x40000000 ? (B[1] << 8) ^ amul1[(B[1] >> 24)] 
@@ -271,70 +268,76 @@ void nextnormal (uint32_t *encode) {
     temp2[1] = A[3] & 0x80000000 ? (B[9] << 8) ^ amul3[(B[9] >> 24)]
                                       : B[9];
 
-    nB10 = temp1[1] ^ B[2] ^ B[7] ^ temp2[1];
+    nB[1] = temp1[1] ^ B[2] ^ B[7] ^ temp2[1];
 
-    /* copy S' to S */
-    A[0] = A[2];   
-    A[1] = A[3];   
-    A[2] = A[4];
-    A[3] = A4;   
-    A[4] = nA4;
-    
-    B[0] = B[2];   B[1] = B[3];   B[2] = B[4];   B[3] = B[5];
-    B[4] = B[6];   B[5] = B[7];   B[6] = B[8];   B[7] = B[9];
-    B[8] = B[10];   B[9] = B10;   
-    B[10] = nB10;
 
-    nlf1[0] = B[9]; nlf1[1] = B0;   nlf1[2] = B[10]; nlf1[3] = B[0];
+    nlf1[0] = nB[0]; nlf1[1] = B0;   nlf1[2] = nB[1]; nlf1[3] = B[2];
     nlf2[0] = pL2;  nlf2[1] = pR2;  nlf2[2] = L2;    nlf2[3] = R2;
     nlf3[0] = pL1;  nlf3[1] = pR1;  nlf3[2] = L1;    nlf3[3] = R1;
-    nlf4[0] = A0;   nlf4[1] = A[3]; nlf4[2] = A[0];  nlf4[3] = A[4];
+    nlf4[0] = A0;   nlf4[1] = nA[0]; nlf4[2] = A[2];  nlf4[3] = nA[1];
+
+    //L1 = pL1; L2 = pL2; R1 = pR1; R2 = pR2;
+
+
+
+    
+    pL1 = sub_k2(R2 + B[6]);
+    pR1 = sub_k2(L2 + nB[0]);
+    pL2 = sub_k2(L1);
+    pR2 = sub_k2(R1);
+    
+    
+    
+    L1 = sub_k2(pR2 + B[7]);
+    R1 = sub_k2(pL2 + nB[1]);
+    L2 = sub_k2(pL1);
+    R2 = sub_k2(pR1);
+    
+    
     
     // first m = 0 ... 3
-    A0 = A[1];
+    A0 = A[3];
     
 
     // first m = 0 ... 9
-    B0 = B[1];
+    B0 = B[3];
 
     // update nA[0][4]
-    temp1[0] = (A[0] << 8) ^ amul0[(A[0] >> 24)];
-    temp1[1] = (A[1] << 8) ^ amul0[(A[1] >> 24)];
+    temp1[0] = (A[2] << 8) ^ amul0[(A[2] >> 24)];
+    temp1[1] = (A[3] << 8) ^ amul0[(A[3] >> 24)];
 
-    A4 = temp1[0] ^ A[3];
-    nA4 = temp1[1] ^ A[4];
-
-
+    nA[2] = temp1[0] ^ nA[0];
+    nA[3] = temp1[1] ^ nA[1];
 
 
-    temp1[0] = A[2] & 0x40000000 ? (B[0] << 8) ^ amul1[(B[0] >> 24)] 
-                                      : (B[0] << 8) ^ amul2[(B[0] >> 24)];
+    temp1[0] = A[4] & 0x40000000 ? (B[2] << 8) ^ amul1[(B[2] >> 24)] 
+                                      : (B[2] << 8) ^ amul2[(B[2] >> 24)];
 
-    temp2[0] = A[2] & 0x80000000 ? (B[8] << 8) ^ amul3[(B[8] >> 24)]
-                                      : B[8];
+    temp2[0] = A[4] & 0x80000000 ? (B[10] << 8) ^ amul3[(B[10] >> 24)]
+                                      : B[10];
     
-    B10 = temp1[0] ^ B[1] ^ B[6] ^ temp2[0];
+    nB[2] = temp1[0] ^ B[3] ^ B[8] ^ temp2[0];
 
 
-    temp1[1] = A[3] & 0x40000000 ? (B[1] << 8) ^ amul1[(B[1] >> 24)] 
-                                      : (B[1] << 8) ^ amul2[(B[1] >> 24)];
+    temp1[1] = nA[0] & 0x40000000 ? (B[3] << 8) ^ amul1[(B[3] >> 24)] 
+                                      : (B[3] << 8) ^ amul2[(B[3] >> 24)];
 
-    temp2[1] = A[3] & 0x80000000 ? (B[9] << 8) ^ amul3[(B[9] >> 24)]
-                                      : B[9];
+    temp2[1] = nA[0] & 0x80000000 ? (nB[0] << 8) ^ amul3[(nB[0] >> 24)]
+                                      : nB[0];
 
-    nB10 = temp1[1] ^ B[2] ^ B[7] ^ temp2[1];
+    nB[3] = temp1[1] ^ B[4] ^ B[9] ^ temp2[1];
 
     /* copy S' to S */
-    A[0] = A[2];   
-    A[1] = A[3];   
-    A[2] = A[4];
-    A[3] = A4;   
-    A[4] = nA4;
+    A[0] = A[4];   
+    A[1] = nA[0];   
+    A[2] = nA[1];
+    A[3] = nA[2];   
+    A[4] = nA[3];
     
-    B[0] = B[2];   B[1] = B[3];   B[2] = B[4];   B[3] = B[5];
-    B[4] = B[6];   B[5] = B[7];   B[6] = B[8];   B[7] = B[9];
-    B[8] = B[10];   B[9] = B10;   
-    B[10] = nB10;
+    B[0] = B[4];   B[1] = B[5];   B[2] = B[6];   B[3] = B[7];
+    B[4] = B[8];   B[5] = B[9];   B[6] = B[10];   B[7] = nB[0];
+    B[8] = nB[1];   B[9] = nB[2];   
+    B[10] = nB[3];
 
     nlf1[4] = B[9]; nlf1[5] = B0;   nlf1[6] = B[10]; nlf1[7] = B[0];
     nlf2[4] = pL2;  nlf2[5] = pR2;  nlf2[6] = L2;    nlf2[7] = R2;
@@ -353,6 +356,13 @@ void nextnormal (uint32_t *encode) {
     __m256i rus2 = _mm256_xor_si256(rus1, inlf3);
     __m256i rus3 = _mm256_xor_si256(rus2, inlf4);
     __m256i rus4 = _mm256_xor_si256(rus3, icode);
+
+    //_mm256_store_si256((__m256i *)keystream, rus3);
+
+    //for (i = 0; i < 8; i++) {
+    //    printf("keystream[%d] : %x\n", i, keystream[i]);
+    //}
+
 
     
 }
@@ -377,4 +387,3 @@ void stream (uint32_t *ZH, uint32_t *ZL, uint32_t *encode) {
     cip2 = encode[1] ^ *ZL;
 
 }
-
